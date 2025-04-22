@@ -67,6 +67,15 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     }
   };
 
+  // Add this function after storeUserInLocalStorage
+  const navigateToDashboard = () => {
+    if (!isClient) return;
+    
+    console.log('Navigating to dashboard...');
+    // Force redirect to dashboard
+    window.location.href = '/';
+  };
+
   // Handle redirect result after sign-in with popup/redirect
   const handleRedirectResult = async () => {
     if (!isClient) return;
@@ -92,6 +101,8 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
             const newUrl = window.location.pathname;
             window.history.replaceState({}, document.title, newUrl);
             
+            // Force navigation to dashboard
+            navigateToDashboard();
             return;
           }
         } catch (error) {
@@ -107,6 +118,14 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         
         // Store user in localStorage
         storeUserInLocalStorage(result.user);
+        
+        // Add auth_status parameter to indicate successful auth for future page loads
+        const url = new URL(window.location.href);
+        url.searchParams.set('auth_status', 'success');
+        window.history.replaceState({}, document.title, url.toString());
+        
+        // Force navigation to dashboard
+        navigateToDashboard();
       }
     } catch (error) {
       console.error('Error handling redirect result:', error);

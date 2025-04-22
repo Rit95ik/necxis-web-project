@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Button, 
   Card, 
@@ -14,15 +14,35 @@ import {
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useAuth } from '@/utils/AuthContext';
+import { useRouter } from 'next/navigation';
 
 const SignIn: React.FC = () => {
-  const { signInWithGoogle, authError } = useAuth();
+  const { signInWithGoogle, authError, currentUser } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const router = useRouter();
+
+  // Handle redirection to dashboard when user becomes authenticated
+  useEffect(() => {
+    if (currentUser) {
+      console.log('User authenticated in SignIn component, redirecting to dashboard');
+      // Wait a moment before redirecting to ensure context is updated
+      setTimeout(() => {
+        router.push('/');
+      }, 500);
+    }
+  }, [currentUser, router]);
 
   const handleSignIn = async () => {
+    console.log('Sign in button clicked');
     setIsSigningIn(true);
-    await signInWithGoogle();
-    setIsSigningIn(false);
+    try {
+      await signInWithGoogle();
+      console.log('Sign in completed');
+    } catch (error) {
+      console.error('Error during sign in:', error);
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   return (

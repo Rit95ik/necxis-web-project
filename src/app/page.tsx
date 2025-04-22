@@ -13,48 +13,41 @@ export default function Home() {
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [initialAuthCheck, setInitialAuthCheck] = useState(true);
   
   // Prevent hydration mismatch by waiting for client-side rendering
   useEffect(() => {
     setIsMounted(true);
+    console.log('Page mounted, checking authentication state...');
+    console.log('Current user from context:', currentUser ? 'User is authenticated' : 'No user');
     
     // Check for stored auth in localStorage
     if (typeof window !== 'undefined') {
       try {
         const storedUser = localStorage.getItem('authUser');
-        if (!storedUser && !loading && !currentUser) {
-          console.log('No stored user found, redirecting to login page');
-          router.push('/login');
+        if (storedUser) {
+          const userData = JSON.parse(storedUser);
+          console.log('Found stored user in localStorage:', userData.email);
+          setShowSuccess(true);
         } else {
-          setInitialAuthCheck(false);
+          console.log('No user found in localStorage');
         }
       } catch (error) {
         console.error('Error checking localStorage:', error);
-        setInitialAuthCheck(false);
       }
     }
-  }, []);
+  }, [currentUser]);
 
   // Show success message when user signs in
   useEffect(() => {
     if (currentUser && isMounted) {
+      console.log('User signed in, showing success message:', currentUser);
       setShowSuccess(true);
-      setInitialAuthCheck(false);
       const timer = setTimeout(() => setShowSuccess(false), 3000);
       return () => clearTimeout(timer);
     }
   }, [currentUser, isMounted]);
 
-  // Redirect to login if no user after loading completes
-  useEffect(() => {
-    if (!loading && !currentUser && isMounted) {
-      console.log('No authenticated user found, redirecting to login');
-      router.push('/login');
-    }
-  }, [loading, currentUser, router, isMounted]);
-
-  if (!isMounted || initialAuthCheck) {
+  if (!isMounted) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -70,17 +63,16 @@ export default function Home() {
         </Box>
       ) : (
         <>
-          {currentUser ? <Dashboard /> : (
-            <Box sx={{ textAlign: 'center', mt: 4 }}>
-              <Typography variant="h5" gutterBottom>
-                Redirecting to Login Page...
-              </Typography>
-              <CircularProgress sx={{ mt: 2 }} />
+          {currentUser ? (
+            <Dashboard />
+          ) : (
+            <Box sx={{ padding: 3 }}>
+              <SignIn />
             </Box>
           )}
           
           <Snackbar 
-            open={showSuccess} 
+            open={showSuccess && currentUser} 
             autoHideDuration={3000} 
             onClose={() => setShowSuccess(false)}
             anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
