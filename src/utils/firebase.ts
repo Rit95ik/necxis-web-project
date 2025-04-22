@@ -51,7 +51,7 @@ if (isClient) {
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
 
-    // Set persistence to local to avoid session storage issues
+    // Always set persistence to local for better user experience
     if (auth) {
       setPersistence(auth, browserLocalPersistence)
         .then(() => {
@@ -62,14 +62,30 @@ if (isClient) {
         });
     }
 
-    // Add the deployed domain to the OAuth allowed domains
-    const deployedDomain = window.location.hostname;
-    googleProvider.setCustomParameters({
-      prompt: 'select_account',
-      login_hint: deployedDomain
-    });
+    // Add the current domain to allowed domains
+    if (typeof window !== 'undefined') {
+      // Add the deployed domain to the OAuth allowed domains
+      const deployedDomain = window.location.hostname;
+      googleProvider.setCustomParameters({
+        prompt: 'select_account',
+        login_hint: deployedDomain
+      });
+    }
 
     console.log('Firebase initialized successfully');
+    
+    // Check if the auth domain is accessible
+    const checkAuthDomain = async () => {
+      try {
+        const response = await fetch(`https://${firebaseConfig.authDomain}`, { method: 'HEAD' });
+        console.log('Auth domain check:', response.status, response.ok);
+      } catch (error) {
+        console.warn('Auth domain connectivity issue:', error);
+      }
+    };
+    
+    checkAuthDomain();
+    
   } catch (error) {
     console.error('Error initializing Firebase:', error);
     
