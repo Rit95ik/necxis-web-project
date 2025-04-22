@@ -1,6 +1,6 @@
-# Necxis Web Application
+# Necxis Web App
 
-This is a Next.js web application with Material UI and Firebase Authentication.
+This is the web application for the Necxis project.
 
 ## Features
 
@@ -58,9 +58,31 @@ The build output will be in the `out` directory, which can be used in the Expo W
 
 ## Deployment
 
-You can deploy this web app on Vercel:
+The web application is deployed at: [https://necxisweb.netlify.app](https://necxisweb.netlify.app)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/yourusername/necxis-project)
+## Local Development
+
+To run the project locally:
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+## Mobile Integration
+
+When integrating with the mobile app, use the hosted URL:
+
+```javascript
+// In your React Native code:
+<WebView 
+  source={{ uri: 'https://necxisweb.netlify.app' }}
+  // other WebView props
+/>
+```
 
 ## Firebase Setup
 
