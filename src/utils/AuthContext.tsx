@@ -3,10 +3,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   User, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  browserSessionPersistence,
+  setPersistence
 } from 'firebase/auth';
 import { auth, googleProvider } from './firebase';
 
@@ -40,33 +44,43 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Google sign-in handler
+  // Function to handle redirect results
+  const handleRedirectResult = async () => {
+    if (!isClient) return;
+    
+    try {
+      const result = await getRedirectResult(auth);
+      if (result) {
+        console.log('Redirect sign-in successful:', result.user.displayName);
+        setAuthError(null);
+      }
+    } catch (error) {
+      console.error('Error handling redirect result:', error);
+      if (error instanceof Error) {
+        setAuthError(error.message);
+      } else {
+        setAuthError('An unknown error occurred during sign in');
+      }
+    }
+  };
+
+  // Google sign-in handler - use redirect instead of popup for better mobile experience
   const signInWithGoogle = async () => {
     if (!isClient) return;
     
     setAuthError(null);
     
     try {
-      console.log('Attempting to sign in with Google...');
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log('Sign in successful:', result.user.displayName);
+      console.log('Setting persistence to session...');
+      await setPersistence(auth, browserSessionPersistence);
       
-      // Clear any previous errors
-      setAuthError(null);
+      console.log('Redirecting to Google sign-in...');
+      await signInWithRedirect(auth, googleProvider);
     } catch (error) {
-      console.error('Error signing in with Google:', error);
+      console.error('Error initiating Google sign-in:', error);
       
-      // Handle specific errors
       if (error instanceof Error) {
         setAuthError(error.message);
-        
-        // Check for common error codes in the error message
-        const errorMessage = error.message;
-        if (errorMessage.includes('popup-closed-by-user')) {
-          setAuthError('Sign-in popup was closed before completing the sign-in');
-        } else if (errorMessage.includes('cancelled-popup-request')) {
-          setAuthError('The sign-in popup was cancelled');
-        }
       } else {
         setAuthError('An unknown error occurred during sign in');
       }
@@ -82,6 +96,15 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     try {
       await firebaseSignOut(auth);
       console.log('Signed out successfully');
+      
+      // Clear any session storage manually to prevent issues
+      try {
+        sessionStorage.clear();
+        localStorage.removeItem('firebase:authUser');
+        localStorage.removeItem('firebase:previousAuthUser');
+      } catch (storageError) {
+        console.warn('Could not clear storage:', storageError);
+      }
       
       // Post a message to the mobile app to clear its session too
       if (window.ReactNativeWebView) {
@@ -104,6 +127,10 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     
     try {
       console.log('Setting up auth state listener...');
+      
+      // Handle redirect result when component mounts
+      handleRedirectResult();
+      
       const unsubscribe = onAuthStateChanged(auth, (user) => {
         setCurrentUser(user);
         setLoading(false);

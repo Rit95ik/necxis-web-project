@@ -1,7 +1,7 @@
 'use client';
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, Auth, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
 // Check if code is running on the client side
@@ -51,9 +51,22 @@ if (isClient) {
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
 
-    // Configure Google Auth Provider
+    // Set persistence to local to avoid session storage issues
+    if (auth) {
+      setPersistence(auth, browserLocalPersistence)
+        .then(() => {
+          console.log('Firebase persistence set to local');
+        })
+        .catch((error) => {
+          console.error('Error setting persistence:', error);
+        });
+    }
+
+    // Add the deployed domain to the OAuth allowed domains
+    const deployedDomain = window.location.hostname;
     googleProvider.setCustomParameters({
-      prompt: 'select_account'
+      prompt: 'select_account',
+      login_hint: deployedDomain
     });
 
     console.log('Firebase initialized successfully');
