@@ -205,7 +205,7 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       // Handle redirect result when component mounts
       handleRedirectResult().finally(() => {
         // Set up auth state listener only after checking redirect result
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
           setLoading(false);
           
           if (user) {
