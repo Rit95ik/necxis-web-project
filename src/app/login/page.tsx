@@ -23,13 +23,19 @@ function LoginContent() {
     async function handleRedirect() {
       try {
         setProcessingRedirect(true);
+        // Check for redirect result
         const result = await getRedirectResult(auth);
         if (result) {
+          console.log('Redirect result found in login page:', result.user.email);
           setRedirectResult(result);
-          console.log('Sign-in successful:', result.user);
+          
+          // Add a slight delay before redirecting to ensure state is updated
+          setTimeout(() => {
+            router.push('/');
+          }, 1000);
         }
       } catch (error) {
-        console.error('Error handling redirect:', error);
+        console.error('Error handling redirect in login page:', error);
         if (error instanceof Error) {
           setRedirectError(error.message);
         } else {
@@ -41,12 +47,29 @@ function LoginContent() {
     }
 
     handleRedirect();
-  }, []);
+    
+    // Also check localStorage for logged-in user
+    const checkLocalStorage = () => {
+      try {
+        const storedUser = localStorage.getItem('authUser');
+        if (storedUser) {
+          console.log('Found authenticated user in localStorage');
+          // Redirect to home page if user is already authenticated
+          router.push('/');
+        }
+      } catch (error) {
+        console.warn('Error checking localStorage:', error);
+      }
+    };
+    
+    checkLocalStorage();
+  }, [router]);
 
-  // Redirect logic
+  // Redirect logic for current user from context
   useEffect(() => {
-    // If user is authenticated, redirect to home
+    // If user is authenticated from context, redirect to home
     if (currentUser && !loading && !processingRedirect) {
+      console.log('User authenticated from context, redirecting to home');
       router.push('/');
     }
   }, [currentUser, loading, processingRedirect, router]);
@@ -54,9 +77,10 @@ function LoginContent() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
+      console.log('Starting Google sign-in from login page');
       await signInWithGoogle();
     } catch (error) {
-      console.error('Error starting sign-in:', error);
+      console.error('Error starting sign-in from login page:', error);
     } finally {
       setLoading(false);
     }

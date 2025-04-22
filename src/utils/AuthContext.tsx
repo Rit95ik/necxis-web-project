@@ -43,16 +43,31 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [initialCheckDone, setInitialCheckDone] = useState(false);
 
   // Function to handle redirect results
   const handleRedirectResult = async () => {
     if (!isClient) return;
     
     try {
+      console.log('Checking for auth redirect result...');
       const result = await getRedirectResult(auth);
       if (result) {
         console.log('Redirect sign-in successful:', result.user.displayName);
+        setCurrentUser(result.user);
         setAuthError(null);
+        
+        // Store user in localStorage for persistence
+        try {
+          localStorage.setItem('authUser', JSON.stringify({
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName,
+            photoURL: result.user.photoURL
+          }));
+        } catch (storageError) {
+          console.warn('Could not store user in localStorage:', storageError);
+        }
       }
     } catch (error) {
       console.error('Error handling redirect result:', error);
@@ -61,6 +76,8 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       } else {
         setAuthError('An unknown error occurred during sign in');
       }
+    } finally {
+      setInitialCheckDone(true);
     }
   };
 
@@ -77,6 +94,7 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       });
       
       // Use redirect-based login as specified
+      console.log('Starting Google sign-in redirect...');
       await signInWithRedirect(auth, googleProvider);
     } catch (error) {
       console.error('Error initiating Google sign-in:', error);
@@ -99,9 +117,10 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       await firebaseSignOut(auth);
       console.log('Signed out successfully');
       
-      // Clear any storage manually
+      // Clear storage
       try {
         sessionStorage.clear();
+        localStorage.removeItem('authUser');
         localStorage.removeItem('firebase:authUser');
         localStorage.removeItem('firebase:previousAuthUser');
       } catch (storageError) {
@@ -120,6 +139,25 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     }
   };
 
+  // Check for stored user on initial load
+  useEffect(() => {
+    if (!isClient) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      // Try to get user from localStorage
+      const storedUser = localStorage.getItem('authUser');
+      if (storedUser) {
+        console.log('Found stored user in localStorage');
+        setCurrentUser(JSON.parse(storedUser) as User);
+      }
+    } catch (error) {
+      console.warn('Error reading from localStorage:', error);
+    }
+  }, []);
+
   // Listen for auth state changes
   useEffect(() => {
     if (!isClient) {
@@ -134,10 +172,34 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       handleRedirectResult();
       
       const unsubscribe = onAuthStateChanged(auth, (user) => {
-        setCurrentUser(user);
         setLoading(false);
         
-        console.log('Auth state changed:', user ? `User: ${user.displayName}` : 'No user');
+        if (user) {
+          console.log('Auth state changed - User is logged in:', user.displayName);
+          setCurrentUser(user);
+          
+          // Store user data in localStorage for persistence
+          try {
+            localStorage.setItem('authUser', JSON.stringify({
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL
+            }));
+          } catch (storageError) {
+            console.warn('Could not store user in localStorage:', storageError);
+          }
+        } else {
+          console.log('Auth state changed - User is logged out');
+          setCurrentUser(null);
+          
+          // Ensure localStorage is cleared
+          try {
+            localStorage.removeItem('authUser');
+          } catch (storageError) {
+            console.warn('Could not clear localStorage:', storageError);
+          }
+        }
         
         // Notify mobile app about authentication state
         if (window.ReactNativeWebView) {

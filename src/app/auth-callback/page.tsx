@@ -4,6 +4,8 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { Box, CircularProgress, Typography, Button, Paper, Alert } from '@mui/material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/utils/AuthContext';
+import { getRedirectResult } from 'firebase/auth';
+import { auth } from '@/utils/firebase';
 
 // Separate component that uses hooks safely
 function AuthCallbackContent() {
@@ -12,39 +14,81 @@ function AuthCallbackContent() {
   const { currentUser, loading } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [processingAuth, setProcessingAuth] = useState(true);
 
   useEffect(() => {
-    // Check for error parameters in the URL
-    if (typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search);
-      const errorMessage = urlParams.get('error_message') || urlParams.get('error');
-      
-      if (errorMessage) {
-        setError(errorMessage);
-      }
-    }
-
-    // If user is logged in, redirect to home page
-    if (currentUser && !loading) {
-      setIsRedirecting(true);
-      
-      // Notify mobile app of successful authentication if in WebView
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'AUTH_SUCCESS',
-          user: {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            displayName: currentUser.displayName
+    // Process authentication
+    async function processAuth() {
+      try {
+        // Check for error parameters in the URL
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const errorMessage = urlParams.get('error_message') || urlParams.get('error');
+          
+          if (errorMessage) {
+            console.error('Auth error from URL:', errorMessage);
+            setError(errorMessage);
+            setProcessingAuth(false);
+            return;
           }
-        }));
+        }
+
+        // Check for redirect result
+        const result = await getRedirectResult(auth);
+        if (result) {
+          console.log('Authentication successful in callback:', result.user.email);
+          
+          // Store user in localStorage for persistence
+          try {
+            localStorage.setItem('authUser', JSON.stringify({
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName,
+              photoURL: result.user.photoURL
+            }));
+          } catch (storageError) {
+            console.warn('Could not store user in localStorage:', storageError);
+          }
+          
+          setIsRedirecting(true);
+          
+          // Notify mobile app of successful authentication if in WebView
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'AUTH_SUCCESS',
+              user: {
+                uid: result.user.uid,
+                email: result.user.email,
+                displayName: result.user.displayName
+              }
+            }));
+          }
+          
+          setTimeout(() => {
+            router.push('/');
+          }, 1500);
+        } else if (currentUser) {
+          // User is already authenticated
+          console.log('User already authenticated in callback page');
+          setIsRedirecting(true);
+          setTimeout(() => {
+            router.push('/');
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error processing authentication in callback:', error);
+        if (error instanceof Error) {
+          setError(error.message);
+        } else {
+          setError('An unknown error occurred during authentication');
+        }
+      } finally {
+        setProcessingAuth(false);
       }
-      
-      setTimeout(() => {
-        router.push('/');
-      }, 1500);
     }
-  }, [currentUser, loading, router]);
+    
+    processAuth();
+  }, [currentUser, router]);
 
   const handleReturnToApp = () => {
     // If we're in a WebView, send a message to return to app
