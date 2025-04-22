@@ -89,7 +89,7 @@ export default function Home() {
           )}
           
           <Snackbar 
-            open={showSuccess && currentUser} 
+            open={showSuccess && currentUser !== null} 
             autoHideDuration={3000} 
             onClose={() => setShowSuccess(false)}
             anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
