@@ -3,16 +3,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
   User, 
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  GoogleAuthProvider,
-  browserSessionPersistence,
-  setPersistence
+  GoogleAuthProvider
 } from 'firebase/auth';
-import { auth, googleProvider } from './firebase';
+import { auth } from './firebase';
 
 // Check if code is running on the client side
 const isClient = typeof window !== 'undefined';
@@ -37,6 +34,9 @@ const AuthContext = createContext<AuthContextType>({
 
 // Export hook for using the auth context
 export const useAuth = () => useContext(AuthContext);
+
+// Create Google provider instance
+const googleProvider = new GoogleAuthProvider();
 
 // Auth provider component
 export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
@@ -64,17 +64,19 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     }
   };
 
-  // Google sign-in handler - use redirect instead of popup for better mobile experience
+  // Google sign-in handler - use redirect
   const signInWithGoogle = async () => {
     if (!isClient) return;
     
     setAuthError(null);
     
     try {
-      console.log('Setting persistence to session...');
-      await setPersistence(auth, browserSessionPersistence);
+      // Configure the provider
+      googleProvider.setCustomParameters({
+        prompt: 'select_account'
+      });
       
-      console.log('Redirecting to Google sign-in...');
+      // Use redirect-based login as specified
       await signInWithRedirect(auth, googleProvider);
     } catch (error) {
       console.error('Error initiating Google sign-in:', error);
@@ -97,7 +99,7 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       await firebaseSignOut(auth);
       console.log('Signed out successfully');
       
-      // Clear any session storage manually to prevent issues
+      // Clear any storage manually
       try {
         sessionStorage.clear();
         localStorage.removeItem('firebase:authUser');
