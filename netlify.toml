@@ -1,1 +1,3 @@
-[build]`ncommand = "npm run build"`npublish = "out"`n`n# Handle SPA redirects`n[[redirects]]`nfrom = "/*"`nto = "/index.html"`nstatus = 200`n`n# Custom 404 page`n[[redirects]]`nfrom = "/*"`nto = "/404.html"`nstatus = 404
+[build]
+command = "npm run build"
+publish = "out"
