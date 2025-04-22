@@ -1,12 +1,1 @@
-﻿[build]
-  command = "npm run build && npm run export"
-  publish = "out"
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
+[build]`ncommand = "npm run build"`npublish = "out"`n`n# Handle SPA redirects`n[[redirects]]`nfrom = "/*"`nto = "/index.html"`nstatus = 200`n`n# Custom 404 page`n[[redirects]]`nfrom = "/*"`nto = "/404.html"`nstatus = 404
