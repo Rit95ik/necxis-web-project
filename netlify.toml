@@ -1,3 +1,35 @@
 [build]
-command = "npm run build"
-publish = "out"
+  command = "npm run build"
+  publish = "out"
+  
+# Explicitly handle login route
+[[redirects]]
+  from = "/login"
+  to = "/login/index.html"
+  status = 200
+
+# Handle auth callback route specifically
+[[redirects]]
+  from = "/auth-callback"
+  to = "/auth-callback/index.html"
+  status = 200
+
+# Add CORS headers for authentication
+[[headers]]
+  for = "/*"
+    [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Origin, X-Requested-With, Content-Type, Accept"
+
+# Handle SPA redirects for all other routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Custom 404 page
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404 
