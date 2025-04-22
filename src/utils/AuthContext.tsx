@@ -1,13 +1,16 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { User } from 'firebase/auth';
 import { 
-  User, 
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  Auth,
+  getAuth,
+  signInWithPopup,
 } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -45,39 +48,69 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [initialCheckDone, setInitialCheckDone] = useState(false);
 
-  // Function to handle redirect results
+  // Function to store user data in localStorage
+  const storeUserInLocalStorage = (user: any) => {
+    if (!user) {
+      localStorage.removeItem('authUser');
+      return;
+    }
+
+    try {
+      localStorage.setItem('authUser', JSON.stringify({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL
+      }));
+    } catch (error) {
+      console.warn('Could not store user in localStorage:', error);
+    }
+  };
+
+  // Handle redirect result after sign-in with popup/redirect
   const handleRedirectResult = async () => {
     if (!isClient) return;
     
+    console.log('Checking for auth redirect result...');
     try {
-      console.log('Checking for auth redirect result...');
-      const result = await getRedirectResult(auth);
-      if (result) {
-        console.log('Redirect sign-in successful:', result.user.displayName);
-        setCurrentUser(result.user);
-        setAuthError(null);
-        
-        // Store user in localStorage for persistence
+      // Check if we were redirected from the external login page
+      const urlParams = new URLSearchParams(window.location.search);
+      const authStatus = urlParams.get('auth_status');
+      
+      if (authStatus === 'success') {
+        console.log('Auth success from redirect');
+        // The user data should already be in localStorage from the redirect page
         try {
-          localStorage.setItem('authUser', JSON.stringify({
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            photoURL: result.user.photoURL
-          }));
-        } catch (storageError) {
-          console.warn('Could not store user in localStorage:', storageError);
+          const storedUser = localStorage.getItem('authUser');
+          if (storedUser) {
+            const userData = JSON.parse(storedUser);
+            setCurrentUser(userData);
+            setLoading(false);
+            console.log('User data loaded from redirect:', userData.displayName);
+            
+            // Clear URL parameters without full page reload
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+            
+            return;
+          }
+        } catch (error) {
+          console.error('Error parsing stored user data:', error);
         }
+      }
+      
+      // Standard Firebase redirect result check
+      const result = await getRedirectResult(auth);
+      if (result && result.user) {
+        console.log('Firebase redirect result obtained:', result.user.displayName);
+        setCurrentUser(result.user);
+        
+        // Store user in localStorage
+        storeUserInLocalStorage(result.user);
       }
     } catch (error) {
       console.error('Error handling redirect result:', error);
-      if (error instanceof Error) {
-        setAuthError(error.message);
-      } else {
-        setAuthError('An unknown error occurred during sign in');
-      }
-    } finally {
-      setInitialCheckDone(true);
+      setAuthError('Authentication failed. Please try again.');
     }
   };
 
@@ -120,7 +153,7 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       // Clear storage
       try {
         sessionStorage.clear();
-        localStorage.removeItem('authUser');
+        storeUserInLocalStorage(null);
         localStorage.removeItem('firebase:authUser');
         localStorage.removeItem('firebase:previousAuthUser');
       } catch (storageError) {
@@ -151,7 +184,8 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       const storedUser = localStorage.getItem('authUser');
       if (storedUser) {
         console.log('Found stored user in localStorage');
-        setCurrentUser(JSON.parse(storedUser) as User);
+        setCurrentUser(JSON.parse(storedUser));
+        setLoading(false);
       }
     } catch (error) {
       console.warn('Error reading from localStorage:', error);
@@ -169,49 +203,45 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       console.log('Setting up auth state listener...');
       
       // Handle redirect result when component mounts
-      handleRedirectResult();
-      
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
-        setLoading(false);
-        
-        if (user) {
-          console.log('Auth state changed - User is logged in:', user.displayName);
-          setCurrentUser(user);
+      handleRedirectResult().finally(() => {
+        // Set up auth state listener only after checking redirect result
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setLoading(false);
           
-          // Store user data in localStorage for persistence
-          try {
-            localStorage.setItem('authUser', JSON.stringify({
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL
-            }));
-          } catch (storageError) {
-            console.warn('Could not store user in localStorage:', storageError);
+          if (user) {
+            console.log('Auth state changed - User is logged in:', user.displayName);
+            setCurrentUser(user);
+            
+            // Store user data in localStorage for persistence
+            storeUserInLocalStorage(user);
+          } else {
+            // Only clear current user if there's no stored user in localStorage
+            try {
+              const storedUser = localStorage.getItem('authUser');
+              if (!storedUser) {
+                console.log('Auth state changed - User is logged out');
+                setCurrentUser(null);
+              }
+            } catch (error) {
+              console.warn('Error checking localStorage:', error);
+              setCurrentUser(null);
+            }
           }
-        } else {
-          console.log('Auth state changed - User is logged out');
-          setCurrentUser(null);
           
-          // Ensure localStorage is cleared
-          try {
-            localStorage.removeItem('authUser');
-          } catch (storageError) {
-            console.warn('Could not clear localStorage:', storageError);
+          // Notify mobile app about authentication state
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({ 
+                type: 'AUTH_STATE_CHANGED', 
+                user: user ? { uid: user.uid, email: user.email } : null 
+              })
+            );
           }
-        }
+        });
         
-        // Notify mobile app about authentication state
-        if (window.ReactNativeWebView) {
-          window.ReactNativeWebView.postMessage(
-            JSON.stringify({ 
-              type: 'AUTH_STATE_CHANGED', 
-              user: user ? { uid: user.uid, email: user.email } : null 
-            })
-          );
-        }
+        return () => unsubscribe();
       });
-  
+      
       // Listen for messages from mobile app
       const handleMessage = (event: MessageEvent) => {
         try {
@@ -227,7 +257,6 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       window.addEventListener('message', handleMessage);
   
       return () => {
-        unsubscribe();
         window.removeEventListener('message', handleMessage);
       };
     } catch (error) {
