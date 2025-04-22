@@ -45,8 +45,16 @@ if (isClient) {
       appId: firebaseConfig.appId ? '✓ present' : '✗ missing'
     });
 
-    // Initialize Firebase
-    app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+    // Initialize Firebase - fix the initialization to prevent init.json request
+    if (!getApps().length) {
+      console.log('Initializing new Firebase instance');
+      app = initializeApp(firebaseConfig);
+    } else {
+      console.log('Reusing existing Firebase instance');
+      app = getApp();
+    }
+    
+    // Initialize auth with explicit app reference
     auth = getAuth(app);
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();

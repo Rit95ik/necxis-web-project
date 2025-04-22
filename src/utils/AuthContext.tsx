@@ -204,8 +204,8 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     }
   };
 
-  // Google sign-in handler - use redirect
-  const signInWithGoogle = async () => {
+  // Google sign-in handler with popup and redirect fallback
+  const signInWithGoogle = async (): Promise<void> => {
     if (!isClient) return;
     
     setAuthError(null);
@@ -220,16 +220,40 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       localStorage.setItem('auth_redirect_pending', 'true');
       localStorage.setItem('auth_redirect_time', Date.now().toString());
       
-      // Use redirect-based login as specified
+      // First attempt: try popup sign in (more reliable in many browsers)
+      try {
+        console.log('Starting Google sign-in with popup...');
+        const result = await signInWithPopup(auth, googleProvider);
+        
+        // If successful, update state and storage
+        if (result?.user) {
+          console.log('Google sign-in with popup successful');
+          setCurrentUser(result.user);
+          storeUserInLocalStorage(result.user);
+          
+          // Clear redirect flags
+          localStorage.removeItem('auth_redirect_pending');
+          localStorage.removeItem('auth_redirect_time');
+          return;
+        }
+      } catch (popupError) {
+        // Popup blocked or failed, fall back to redirect
+        console.log('Popup sign-in failed, falling back to redirect');
+      }
+      
+      // Second attempt: fallback to redirect
       console.log('Starting Google sign-in redirect...');
       await signInWithRedirect(auth, googleProvider);
-      
-      // The rest will be handled by handleRedirectResult after redirect
+      // Control flow will be handled by handleRedirectResult after redirect
     } catch (error) {
-      console.error('Error initiating Google sign-in:', error);
+      // Handle any errors in the overall process
+      console.error('Error in Google sign-in process:', error);
+      
+      // Clean up flags
       localStorage.removeItem('auth_redirect_pending');
       localStorage.removeItem('auth_redirect_time');
       
+      // Set error message
       if (error instanceof Error) {
         setAuthError(error.message);
       } else {
