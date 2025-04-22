@@ -74,18 +74,6 @@ if (isClient) {
 
     console.log('Firebase initialized successfully');
     
-    // Check if the auth domain is accessible
-    const checkAuthDomain = async () => {
-      try {
-        const response = await fetch(`https://${firebaseConfig.authDomain}`, { method: 'HEAD' });
-        console.log('Auth domain check:', response.status, response.ok);
-      } catch (error) {
-        console.warn('Auth domain connectivity issue:', error);
-      }
-    };
-    
-    checkAuthDomain();
-    
   } catch (error) {
     console.error('Error initializing Firebase:', error);
     

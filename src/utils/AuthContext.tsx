@@ -72,8 +72,21 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     if (!isClient) return;
     
     console.log('Navigating to dashboard...');
-    // Force redirect to dashboard
-    window.location.href = '/';
+    
+    // Clear any auth-related URL parameters
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has('auth_status')) {
+      currentUrl.searchParams.delete('auth_status');
+      window.history.replaceState({}, document.title, currentUrl.toString());
+    }
+    
+    // If we're not already on the home page, redirect there
+    if (window.location.pathname !== '/') {
+      window.location.href = '/';
+    } else {
+      // If we're already on the home page, force a reload to ensure UI updates
+      window.location.reload();
+    }
   };
 
   // Handle redirect result after sign-in with popup/redirect
@@ -81,6 +94,13 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     if (!isClient) return;
     
     console.log('Checking for auth redirect result...');
+    
+    // Check if there's a pending auth redirect
+    const isPendingAuth = localStorage.getItem('auth_redirect_pending') === 'true';
+    if (isPendingAuth) {
+      console.log('Pending auth redirect detected');
+    }
+    
     try {
       // Check if we were redirected from the external login page
       const urlParams = new URLSearchParams(window.location.search);
@@ -111,7 +131,12 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       }
       
       // Standard Firebase redirect result check
+      console.log('Checking Firebase redirect result...');
       const result = await getRedirectResult(auth);
+      
+      // Clear the pending auth flag
+      localStorage.removeItem('auth_redirect_pending');
+      
       if (result && result.user) {
         console.log('Firebase redirect result obtained:', result.user.displayName);
         setCurrentUser(result.user);
@@ -126,8 +151,15 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         
         // Force navigation to dashboard
         navigateToDashboard();
+      } else if (isPendingAuth) {
+        // If we had a pending auth but got no result, there may be an issue
+        console.log('No redirect result despite pending auth flag');
+        setAuthError('Authentication process did not complete. Please try again.');
       }
     } catch (error) {
+      // Clear the pending auth flag on error
+      localStorage.removeItem('auth_redirect_pending');
+      
       console.error('Error handling redirect result:', error);
       setAuthError('Authentication failed. Please try again.');
     }
@@ -145,11 +177,18 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         prompt: 'select_account'
       });
       
+      // Add a flag to localStorage to track login attempt
+      localStorage.setItem('auth_redirect_pending', 'true');
+      
       // Use redirect-based login as specified
       console.log('Starting Google sign-in redirect...');
       await signInWithRedirect(auth, googleProvider);
+      
+      // This line will not execute immediately because of the redirect
+      // The handleRedirectResult function will handle the post-redirect flow
     } catch (error) {
       console.error('Error initiating Google sign-in:', error);
+      localStorage.removeItem('auth_redirect_pending');
       
       if (error instanceof Error) {
         setAuthError(error.message);
@@ -264,9 +303,18 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       // Listen for messages from mobile app
       const handleMessage = (event: MessageEvent) => {
         try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'MOBILE_SIGN_OUT_REQUEST') {
-            signOut();
+          // Check if the message is already an object (not a string)
+          if (typeof event.data === 'object') {
+            const data = event.data;
+            if (data.type === 'MOBILE_SIGN_OUT_REQUEST') {
+              signOut();
+            }
+          } else if (typeof event.data === 'string') {
+            // Try to parse as JSON only if it's a string
+            const data = JSON.parse(event.data);
+            if (data.type === 'MOBILE_SIGN_OUT_REQUEST') {
+              signOut();
+            }
           }
         } catch (error) {
           console.error('Error processing message from mobile app:', error);
