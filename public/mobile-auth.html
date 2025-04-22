@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Necxis Mobile Auth</title>
+  <script src="https://www.gstatic.com/firebasejs/10.5.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.2/firebase-auth-compat.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    p {
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .button {
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      color: #444;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      padding: 12px 20px;
+      width: 100%;
+      transition: background-color 0.3s;
+    }
+    .button:hover {
+      background-color: #f5f5f5;
+    }
+    .button img {
+      margin-right: 10px;
+      height: 20px;
+      width: 20px;
+    }
+    .error {
+      color: #d32f2f;
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #ffebee;
+      border-radius: 4px;
+      display: none;
+    }
+    .loading {
+      display: none;
+      margin-top: 20px;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Welcome</h1>
+    <p>Sign in to continue to Necxis App</p>
+    
+    <div id="error-message" class="error"></div>
+    
+    <button id="login-button" class="button">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+      Sign in with Google
+    </button>
+    
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Signing in...</p>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Firebase with your config
+    const firebaseConfig = {
+      apiKey: "AIzaSyA3fnbWCWcMxAewpJrFKKkrTdK30M5Atig",
+      authDomain: "necxis-a684f.firebaseapp.com",
+      projectId: "necxis-a684f",
+      storageBucket: "necxis-a684f.firebasestorage.app",
+      messagingSenderId: "451037214549",
+      appId: "1:451037214549:web:4f0006eb7726b808ee21dc",
+      measurementId: "G-91CWYPCE51"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    
+    const errorElement = document.getElementById('error-message');
+    const loadingElement = document.getElementById('loading');
+    const loginButton = document.getElementById('login-button');
+    
+    // Check if we're in a WebView from React Native
+    const isInWebView = !!window.ReactNativeWebView;
+    
+    // Function to show error
+    function showError(message) {
+      errorElement.textContent = message;
+      errorElement.style.display = 'block';
+      loadingElement.style.display = 'none';
+      loginButton.disabled = false;
+    }
+    
+    // Function to notify React Native of authentication result
+    function sendMessageToReactNative(data) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+      }
+    }
+    
+    // Listen for auth state changes
+    firebase.auth().onAuthStateChanged(function(user) {
+      if (user) {
+        // User is signed in, send data to React Native
+        const userData = {
+          type: 'AUTH_SUCCESS',
+          user: {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL
+          }
+        };
+        
+        // Store user in localStorage as well
+        try {
+          localStorage.setItem('authUser', JSON.stringify(userData.user));
+        } catch (error) {
+          console.error('Error storing user data:', error);
+        }
+        
+        // Send to React Native
+        sendMessageToReactNative(userData);
+        
+        // If we're not in WebView, redirect to main app
+        if (!isInWebView) {
+          window.location.href = '/';
+        }
+      }
+    });
+    
+    // Handle login button click
+    loginButton.addEventListener('click', function() {
+      // Show loading
+      loadingElement.style.display = 'block';
+      loginButton.disabled = true;
+      errorElement.style.display = 'none';
+      
+      // Create a Google provider
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      
+      // Sign in with popup (better for mobile browsers)
+      firebase.auth().signInWithPopup(provider)
+        .then(function(result) {
+          // This gives you a Google Access Token
+          const token = result.credential.accessToken;
+          // The signed-in user info
+          const user = result.user;
+          
+          // Success! Auth state change listener will handle the rest
+        })
+        .catch(function(error) {
+          console.error('Auth error:', error);
+          
+          // If popup fails, try redirect (fallback)
+          if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+            showError('Popup was blocked. Trying another method...');
+            
+            setTimeout(() => {
+              // Try redirect method
+              firebase.auth().signInWithRedirect(provider)
+                .then(() => {
+                  // This won't execute until after redirect returns
+                })
+                .catch((redirectError) => {
+                  showError('Authentication failed. Please try again.');
+                  console.error('Redirect error:', redirectError);
+                });
+            }, 1000);
+          } else {
+            // Show appropriate error message
+            let errorMessage = 'Authentication failed. Please try again.';
+            if (error.code === 'auth/network-request-failed') {
+              errorMessage = 'Network error. Please check your connection.';
+            }
+            showError(errorMessage);
+          }
+        });
+    });
+    
+    // Handle redirect result
+    firebase.auth().getRedirectResult()
+      .then(function(result) {
+        if (result.user) {
+          // User successfully authenticated after redirect
+          // The auth state change listener will handle the rest
+        }
+      })
+      .catch(function(error) {
+        if (error.code !== 'auth/credential-already-in-use') {
+          showError('Authentication failed. Please try again.');
+          console.error('Redirect result error:', error);
+        }
+      });
+  </script>
+</body>
+</html> 
