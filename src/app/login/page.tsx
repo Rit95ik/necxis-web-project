@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { Box, Typography, Button, Paper, Alert, CircularProgress } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -8,7 +8,8 @@ import { useAuth } from '@/utils/AuthContext';
 import { getRedirectResult } from 'firebase/auth';
 import { auth } from '@/utils/firebase';
 
-export default function LoginPage() {
+// Separate component that uses useSearchParams
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [redirectResult, setRedirectResult] = useState<any>(null);
@@ -141,5 +142,30 @@ export default function LoginPage() {
         </Typography>
       </Paper>
     </Box>
+  );
+}
+
+// Main page component with Suspense
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '100vh',
+          p: 3
+        }}
+      >
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>
+          Loading...
+        </Typography>
+      </Box>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 } 

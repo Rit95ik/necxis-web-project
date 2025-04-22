@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { Box, CircularProgress, Typography, Button, Paper, Alert } from '@mui/material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/utils/AuthContext';
 
-const AuthCallback = () => {
+// Separate component that uses hooks safely
+function AuthCallbackContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser, loading } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -112,6 +114,27 @@ const AuthCallback = () => {
       </Paper>
     </Box>
   );
-};
+}
 
-export default AuthCallback; 
+// Main page component with Suspense
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        minHeight: '100vh',
+        p: 3 
+      }}>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>
+          Loading...
+        </Typography>
+      </Box>
+    }>
+      <AuthCallbackContent />
+    </Suspense>
+  );
+} 
