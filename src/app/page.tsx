@@ -20,6 +20,20 @@ export default function Home() {
     console.log('Page mounted, checking authentication state...');
     console.log('Current user from context:', currentUser ? 'User is authenticated' : 'No user');
     
+    // Check for successful auth flag
+    const authSuccessful = localStorage.getItem('auth_successful') === 'true';
+    const authTime = parseInt(localStorage.getItem('auth_time') || '0', 10);
+    const timeSinceAuth = Date.now() - authTime;
+    
+    // Only consider recent auth events (last 30 seconds)
+    if (authSuccessful && timeSinceAuth < 30000) {
+      console.log('Recent successful authentication detected');
+      // Clear the flag so we don't keep showing the message on every page load
+      localStorage.removeItem('auth_successful');
+      localStorage.removeItem('auth_time');
+      setShowSuccess(true);
+    }
+    
     // Check for stored auth in localStorage
     if (typeof window !== 'undefined') {
       try {
@@ -27,7 +41,10 @@ export default function Home() {
         if (storedUser) {
           const userData = JSON.parse(storedUser);
           console.log('Found stored user in localStorage:', userData.email);
-          setShowSuccess(true);
+          // Only set showSuccess if we haven't already set it
+          if (!authSuccessful) {
+            setShowSuccess(true);
+          }
         } else {
           console.log('No user found in localStorage');
         }

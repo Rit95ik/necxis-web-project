@@ -73,6 +73,10 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     
     console.log('Navigating to dashboard...');
     
+    // Set a flag to indicate successful auth
+    localStorage.setItem('auth_successful', 'true');
+    localStorage.setItem('auth_time', Date.now().toString());
+    
     // Clear any auth-related URL parameters
     const currentUrl = new URL(window.location.href);
     if (currentUrl.searchParams.has('auth_status')) {
@@ -85,7 +89,10 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       window.location.href = '/';
     } else {
       // If we're already on the home page, force a reload to ensure UI updates
-      window.location.reload();
+      // Use a small timeout to allow state to settle
+      setTimeout(() => {
+        window.location.reload();
+      }, 100);
     }
   };
 
@@ -95,13 +102,38 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
     
     console.log('Checking for auth redirect result...');
     
-    // Check if there's a pending auth redirect
+    // Check if there's a pending auth redirect and how long ago it was initiated
     const isPendingAuth = localStorage.getItem('auth_redirect_pending') === 'true';
+    const redirectTime = parseInt(localStorage.getItem('auth_redirect_time') || '0', 10);
+    const timeSinceRedirect = Date.now() - redirectTime;
+    
+    // If the redirect was initiated more than 5 minutes ago, it's probably stale
+    const isStaleRedirect = timeSinceRedirect > 5 * 60 * 1000;
+    
     if (isPendingAuth) {
-      console.log('Pending auth redirect detected');
+      if (isStaleRedirect) {
+        console.log('Clearing stale redirect state (more than 5 minutes old)');
+        localStorage.removeItem('auth_redirect_pending');
+        localStorage.removeItem('auth_redirect_time');
+      } else {
+        console.log('Pending auth redirect detected, initiated', Math.round(timeSinceRedirect/1000), 'seconds ago');
+      }
     }
     
     try {
+      // First, check current user directly - might already be logged in
+      const currentUserCheck = auth.currentUser;
+      if (currentUserCheck) {
+        console.log('Already logged in as', currentUserCheck.displayName);
+        setCurrentUser(currentUserCheck);
+        storeUserInLocalStorage(currentUserCheck);
+        
+        // Clear redirect flags since we're already logged in
+        localStorage.removeItem('auth_redirect_pending');
+        localStorage.removeItem('auth_redirect_time');
+        return;
+      }
+      
       // Check if we were redirected from the external login page
       const urlParams = new URLSearchParams(window.location.search);
       const authStatus = urlParams.get('auth_status');
@@ -121,6 +153,10 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
             const newUrl = window.location.pathname;
             window.history.replaceState({}, document.title, newUrl);
             
+            // Clear redirect flags
+            localStorage.removeItem('auth_redirect_pending');
+            localStorage.removeItem('auth_redirect_time');
+            
             // Force navigation to dashboard
             navigateToDashboard();
             return;
@@ -136,6 +172,7 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       
       // Clear the pending auth flag
       localStorage.removeItem('auth_redirect_pending');
+      localStorage.removeItem('auth_redirect_time');
       
       if (result && result.user) {
         console.log('Firebase redirect result obtained:', result.user.displayName);
@@ -151,14 +188,16 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
         
         // Force navigation to dashboard
         navigateToDashboard();
-      } else if (isPendingAuth) {
+      } else if (isPendingAuth && !isStaleRedirect) {
         // If we had a pending auth but got no result, there may be an issue
+        // But only show the error if it's not a stale redirect
         console.log('No redirect result despite pending auth flag');
         setAuthError('Authentication process did not complete. Please try again.');
       }
     } catch (error) {
       // Clear the pending auth flag on error
       localStorage.removeItem('auth_redirect_pending');
+      localStorage.removeItem('auth_redirect_time');
       
       console.error('Error handling redirect result:', error);
       setAuthError('Authentication failed. Please try again.');
@@ -179,16 +218,17 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       
       // Add a flag to localStorage to track login attempt
       localStorage.setItem('auth_redirect_pending', 'true');
+      localStorage.setItem('auth_redirect_time', Date.now().toString());
       
       // Use redirect-based login as specified
       console.log('Starting Google sign-in redirect...');
       await signInWithRedirect(auth, googleProvider);
       
-      // This line will not execute immediately because of the redirect
-      // The handleRedirectResult function will handle the post-redirect flow
+      // The rest will be handled by handleRedirectResult after redirect
     } catch (error) {
       console.error('Error initiating Google sign-in:', error);
       localStorage.removeItem('auth_redirect_pending');
+      localStorage.removeItem('auth_redirect_time');
       
       if (error instanceof Error) {
         setAuthError(error.message);
@@ -303,6 +343,15 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
       // Listen for messages from mobile app
       const handleMessage = (event: MessageEvent) => {
         try {
+          // Skip React DevTools and other special messages that contain specific tokens
+          if (typeof event.data === 'string' && 
+              (event.data.includes('react-devtools') || 
+               event.data.includes('{"') === false || 
+               event.data.startsWith('_'))) {
+            // Ignore these messages - they're from DevTools or other tools
+            return;
+          }
+          
           // Check if the message is already an object (not a string)
           if (typeof event.data === 'object') {
             const data = event.data;
@@ -310,14 +359,24 @@ export const AuthProvider: React.FC<{children: ReactNode}> = ({ children }) => {
               signOut();
             }
           } else if (typeof event.data === 'string') {
-            // Try to parse as JSON only if it's a string
-            const data = JSON.parse(event.data);
-            if (data.type === 'MOBILE_SIGN_OUT_REQUEST') {
-              signOut();
+            // Only try to parse strings that look like valid JSON
+            if (event.data.trim().startsWith('{') && event.data.trim().endsWith('}')) {
+              try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'MOBILE_SIGN_OUT_REQUEST') {
+                  signOut();
+                }
+              } catch (parseError) {
+                // Silently ignore parsing errors for non-critical messages
+                console.debug('Ignoring non-JSON message:', event.data.substring(0, 20) + '...');
+              }
             }
           }
         } catch (error) {
-          console.error('Error processing message from mobile app:', error);
+          // Only log critical errors, not parsing issues
+          if (!(error instanceof SyntaxError)) {
+            console.error('Error processing message from mobile app:', error);
+          }
         }
       };
   
