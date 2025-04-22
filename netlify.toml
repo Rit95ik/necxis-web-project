@@ -1,15 +1,1 @@
-[build]
-  command = "npm run build"
-  publish = "out"
-  
-# Handle SPA redirects - critical for client-side routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# Custom 404 page
-[[redirects]]
-  from = "/*"
-  to = "/404.html"
-  status = 404 
+ÿþ
